@@ -1,0 +1,43 @@
+# ── Claude Code: instruções, configurações locais e memória do assistente ──
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.mcp.json
+
+# ── Segredos do Correio de Nós Dois (redundante com correio-de-nos-dois/.gitignore de propósito) ──
+# Chaves do papel, rascunhos das cartas e o PDF das etiquetas: quem tiver isso abre as cartas
+# no dia (ou falsifica uma). Só as cartas LACRADAS em public/letters/ podem ser públicas.
+**/secrets/
+paper-keys*.json
+labels-config*.json
+etiquetas*.pdf
+
+# Variáveis de ambiente e chaves em geral (ex.: chaves VAPID do push, tokens da Vercel)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Vercel CLI (guarda o id do projeto/time e pode guardar variáveis puxadas com `vercel env pull`)
+.vercel/
+
+# ── Build, dependências e lixo de ferramentas ──
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.venv/
+logs/
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

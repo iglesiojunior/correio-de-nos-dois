@@ -1,0 +1,78 @@
+/* Painel admin: mesma paleta do app, sem a cena 3D. Só você vê. */
+:root {
+  --outline: #4e2d22;
+  --parch: #fbe6c8;
+  --parch-hi: #fff4e0;
+  --parch-lo: #e9c79f;
+  --ink: #4e2d22;
+  --ink-soft: #8a5a43;
+  --rose: #d9434f;
+  --gold: #f2bf4b;
+  --leaf: #5e9a4c;
+  --bg: #8cc06a;
+  --f: 'Pixelify Sans', 'Courier New', monospace;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f); }
+button, textarea, input { font: inherit; color: inherit; }
+
+.adm { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.adm-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.adm-top h1 { margin: 0; font-size: 28px; color: var(--parch-hi); text-shadow: 2px 2px 0 var(--outline); }
+.adm-top p { margin: 0; color: var(--outline); }
+
+.adm-body { display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 760px) { .adm-body { grid-template-columns: 1fr; } .adm-list { max-height: 240px; } }
+
+.adm-list {
+  display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 150px); overflow-y: auto;
+  background: var(--parch-lo); border: 3px solid var(--outline); padding: 6px;
+}
+.adm-env {
+  display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 8px; text-align: left;
+  background: var(--parch); border: 2px solid transparent; padding: 6px 8px; cursor: pointer;
+}
+.adm-env:hover { border-color: var(--ink-soft); }
+.adm-env.is-sel { border-color: var(--outline); background: var(--parch-hi); }
+.adm-num { font-weight: 600; font-size: 18px; text-align: center; }
+.adm-date { font-size: 13px; color: var(--ink-soft); }
+.adm-tag { font-size: 12px; padding: 1px 6px; border: 2px solid var(--outline); white-space: nowrap; }
+.tag-vazia { background: var(--parch-hi); color: var(--ink-soft); }
+.tag-rascunho { background: var(--gold); }
+.tag-lacrada { background: var(--leaf); color: var(--parch-hi); }
+.tag-alterada { background: var(--rose); color: var(--parch-hi); }
+
+.adm-editor { background: var(--parch); border: 3px solid var(--outline); padding: 16px; min-width: 0; }
+.adm-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.adm-head h2 { margin: 0; }
+.adm-head span { color: var(--ink-soft); }
+
+.adm-editor textarea {
+  width: 100%; min-height: 320px; margin-top: 12px; padding: 12px; resize: vertical;
+  background: var(--parch-hi); border: 2px solid var(--outline); font-size: 17px; line-height: 1.5;
+}
+.adm-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+
+.adm-photo { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+.adm-photo img { width: 120px; height: 120px; object-fit: cover; border: 2px solid var(--outline); }
+.adm-photo p { margin: 0 0 6px; }
+.adm-file { display: block; width: 100%; padding: 12px; border: 2px dashed var(--ink-soft); cursor: pointer; color: var(--ink-soft); }
+.adm-file input { display: none; }
+
+.adm-actions { display: flex; gap: 8px; margin-top: 16px; }
+.adm-actions button, .adm-photo button {
+  padding: 8px 14px; background: var(--parch-hi); border: 2px solid var(--outline);
+  box-shadow: 2px 2px 0 var(--outline); cursor: pointer;
+}
+.adm-actions .adm-primary { background: var(--rose); color: var(--parch-hi); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.adm-warn { background: var(--rose); color: var(--parch-hi); padding: 8px; margin: 12px 0 0; }
+.adm-msg { margin: 12px 0 0; }
+.msg-ok { color: var(--leaf); }
+.msg-erro { color: var(--rose); font-weight: 600; }
+.adm-sealed { font-size: 13px; color: var(--ink-soft); }
+
+.adm-foot { margin-top: 16px; font-size: 13px; color: var(--outline); }
+.adm-foot code { background: var(--parch); padding: 2px 6px; overflow-wrap: anywhere; }
