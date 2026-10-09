@@ -2,7 +2,8 @@ import type { Trip } from '../domain'
 
 /**
  * Calendário real da viagem: 25 envelopes, um por dia, de 14/10 a 07/11/2026,
- * abrindo às 08:00 de Teresina. O envelope 0 é o de teste, entregue no sábado 10/10.
+ * abrindo às 08:00 de Teresina. O envelope 0 é o de teste, entregue no sábado 10/10; abre desde 09/10
+ * para dar para testar antes da entrega.
  *
  * As datas NÃO vão no QR: só o número do envelope. Dá para ajustar as datas aqui
  * até a carta daquele envelope ser lacrada (a fechadura usa a data do momento do lacre).
@@ -12,7 +13,7 @@ export const TRIP: Trip = {
   envelopeCount: 25,
   openingTime: '08:00',
   utcOffset: '-03:00',
-  testEnvelopeOpensAt: '2026-10-10T00:00:00-03:00',
+  testEnvelopeOpensAt: '2026-10-09T00:00:00-03:00',
 }
 
 /** Endereço público do app. Vai impresso em TODOS os QR: não muda depois de imprimir. */
