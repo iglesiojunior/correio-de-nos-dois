@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { SIGNATURE } from '../config/trip'
-import { adminApi, compressPhoto, type EnvelopeStatus } from './api'
+import { adminApi, arPreviewUrl, compressPhoto, imageToArFigure, type EnvelopeStatus } from './api'
 
 type Phase = 'vazia' | 'rascunho' | 'lacrada' | 'alterada'
 
@@ -45,6 +45,8 @@ export function Admin() {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'erro'; text: string } | null>(null)
   const [photoVersion, setPhotoVersion] = useState(0)
+  const [arVersion, setArVersion] = useState(0)
+  const [arPreview, setArPreview] = useState<{ url: string; label: string } | null>(null)
 
   const current = envelopes.find((e) => e.id === selected)
   const dirty = text !== savedText
@@ -86,6 +88,28 @@ export function Admin() {
       alive = false
     }
   }, [selected])
+
+  // pré-visualização da figura de AR do envelope selecionado
+  useEffect(() => {
+    let alive = true
+    let url: string | null = null
+    adminApi
+      .ar(selected)
+      .then((fig) => {
+        if (!alive) return
+        url = fig && arPreviewUrl(fig)
+        setArPreview(
+          fig && url
+            ? { url, label: fig.kind === 'voxels' ? `pixel art ${fig.width}x${fig.height} → voxels` : `cartão (${kb(fig.data.length)})` }
+            : null,
+        )
+      })
+      .catch((e: Error) => setMessage({ kind: 'erro', text: e.message }))
+    return () => {
+      alive = false
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+    }
+  }, [selected, arVersion])
 
   // não perder o texto ao fechar a aba sem salvar
   useEffect(() => {
@@ -136,6 +160,25 @@ export function Admin() {
     run('Removendo a foto', async () => {
       updateOne(await adminApi.deletePhoto(selected))
       return 'Foto removida.'
+    })
+
+  const onAr = (file: File | undefined) => {
+    if (!file) return
+    run('Preparando a figura', async () => {
+      const fig = await imageToArFigure(file)
+      updateOne(await adminApi.saveAr(selected, fig))
+      setArVersion((v) => v + 1)
+      return fig.kind === 'voxels'
+        ? `Figura salva: ${fig.width}x${fig.height} cubinhos.`
+        : `Imagem grande: vai aparecer como cartão (${kb(fig.data.length)}).`
+    })
+  }
+
+  const onRemoveAr = () =>
+    run('Removendo a figura', async () => {
+      updateOne(await adminApi.deleteAr(selected))
+      setArVersion((v) => v + 1)
+      return 'Figura removida: vai aparecer o coração.'
     })
 
   const counts = envelopes.reduce<Record<Phase, number>>(
@@ -215,6 +258,38 @@ export function Admin() {
                   />
                 </label>
               )}
+            </section>
+
+            <section className="adm-ar">
+              <p className="adm-ar-title">Figura em AR (aparece sobre o QR quando a carta abre)</p>
+              <div className="adm-photo">
+                {arPreview ? (
+                  <img className="adm-ar-img" src={arPreview.url} alt="Figura de AR" />
+                ) : (
+                  <span className="adm-ar-default" aria-hidden="true">♥</span>
+                )}
+                <div>
+                  <p>{arPreview ? arPreview.label : 'Sem figura: aparece o coração padrão.'}</p>
+                  <label className="adm-file adm-file-inline">
+                    {arPreview ? 'trocar' : '+ escolher imagem'}
+                    <input
+                      type="file"
+                      accept="image/png,image/gif,image/webp,image/jpeg"
+                      onChange={(ev) => {
+                        onAr(ev.target.files?.[0])
+                        ev.target.value = ''
+                      }}
+                      disabled={!!busy}
+                    />
+                  </label>
+                  {arPreview && (
+                    <button onClick={onRemoveAr} disabled={!!busy}>
+                      Remover
+                    </button>
+                  )}
+                  <p className="adm-hint">PNG até 32x32 com fundo transparente vira 3D de cubinhos. Maior que isso vira um cartão.</p>
+                </div>
+              </div>
             </section>
 
             <div className="adm-actions">

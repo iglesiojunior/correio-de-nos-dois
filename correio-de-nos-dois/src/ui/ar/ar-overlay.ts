@@ -1,12 +1,17 @@
 /**
- * Camada de AR sobre o vídeo do leitor: um coração de voxels (pixel art em 3D) flutuando
- * na frente do QR, girando como uma moeda, com o número do envelope em cima.
+ * Camada de AR sobre o vídeo do leitor: uma figura flutuando na frente do QR, com um texto em cima.
+ *
+ * - padrão (carta sem figura): coração de voxels;
+ * - carta lacrada: cadeado fechado, com a contagem regressiva no texto;
+ * - abrindo (decifrando): envelope;
+ * - figura da carta: a pixel art que o autor escolheu vira voxels; imagem maior vira um cartão.
  *
  * O canvas tem a MESMA resolução do vídeo e o mesmo `object-fit: cover` no CSS, então
  * pixel do detector = pixel do canvas, sem conversão de coordenadas.
  * Carregado sob demanda (divide o three.js com a cena de fundo); se falhar, o leitor segue sem AR.
  */
 import * as THREE from 'three'
+import type { ArFigure } from '../../domain'
 import { poseFromCorners, type Point } from './pose'
 
 export interface ArFrame {
@@ -15,56 +20,165 @@ export interface ArFrame {
   readonly height: number
 }
 
+export type ArShow =
+  | { readonly kind: 'heart' }
+  | { readonly kind: 'lock' }
+  | { readonly kind: 'envelope' }
+  | { readonly kind: 'figure'; readonly figure: ArFigure }
+
 export interface ArOverlay {
   /** Chame a cada detecção; null quando o QR some. */
   update(frame: ArFrame | null): void
+  show(what: ArShow): void
   setLabel(text: string): void
   dispose(): void
 }
 
-// coração 7x6 (linha de cima primeiro)
-const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...']
-const VOXEL = 0.11 // em "lados de QR": o coração fica com ~3/4 da largura do código
-const FLOAT = 0.55 // quanto o coração sai do papel em direção à câmera
-const LOST_MS = 400 // some se o QR ficar esse tempo sem ser visto
+// ---------- pixel art embutida (linha de cima primeiro; '.' = vazio) ----------
 
-function buildHeart(): THREE.Group {
-  const group = new THREE.Group()
-  const geo = new THREE.BoxGeometry(VOXEL, VOXEL, VOXEL)
-  const red = new THREE.MeshLambertMaterial({ color: 0xd9434f })
-  const light = new THREE.MeshLambertMaterial({ color: 0xf2788a })
-  HEART.forEach((row, r) =>
-    [...row].forEach((c, col) => {
-      if (c !== 'X') return
-      // brilho em cima à esquerda, como nos ícones do app
-      const shine = (r === 1 && (col === 1 || col === 2)) || (r === 2 && col === 1)
-      const m = new THREE.Mesh(geo, shine ? light : red)
-      m.position.set((col - 3) * VOXEL, (r - 2.5) * VOXEL, 0)
-      group.add(m)
+const PALETTE: Record<string, number> = {
+  R: 0xd9434f, // rosa do app
+  r: 0xf2788a, // brilho
+  G: 0x9aa3ad, // aço da alça
+  Y: 0xf2bf4b, // ouro
+  y: 0xffe08a,
+  D: 0x4e2d22, // contorno/buraco da fechadura
+  P: 0xfbe6c8, // papel
+  p: 0xc9a27a, // dobra do envelope
+}
+
+const BITMAPS = {
+  heart: ['.RR.RR.', 'RrrRRRR', 'RrRRRRR', '.RRRRR.', '..RRR..', '...R...'],
+  lock: [
+    '..GGGGG..',
+    '.G.....G.',
+    '.G.....G.',
+    '.G.....G.',
+    'YYYYYYYYY',
+    'YyyyyyyyY',
+    'YyYDDDYYY', // fechadura: cabeça redonda em cima, rasgo que alarga embaixo
+    'YYYDDDYYY',
+    'YYYYDYYYY',
+    'YYYDDDYYY',
+    'YYYYYYYYY',
+  ],
+  envelope: ['PPPPPPPPP', 'PpPPPPPpP', 'PPpPPPpPP', 'PPPpRpPPP', 'PPPPRPPPP', 'PPPPPPPPP', 'PPPPPPPPP'],
+}
+
+function bitmapToRgba(rows: readonly string[]): ArFigure & { kind: 'voxels' } {
+  const width = rows[0].length
+  const height = rows.length
+  const rgba = new Uint8Array(width * height * 4)
+  rows.forEach((row, y) =>
+    [...row].forEach((ch, x) => {
+      const c = PALETTE[ch]
+      if (c === undefined) return
+      rgba.set([(c >> 16) & 255, (c >> 8) & 255, c & 255, 255], (y * width + x) * 4)
     }),
   )
+  return { kind: 'voxels', width, height, rgba }
+}
+
+// ---------- construção das figuras (no referencial do QR: x direita, y baixo, z para dentro) ----------
+
+const FIGURE_SIZE = 0.8 // maior lado da figura, em "lados de QR"
+const FLOAT = 0.55 // quanto a figura sai do papel em direção à câmera
+const LOST_MS = 400 // some se o QR ficar esse tempo sem ser visto
+
+function voxelMesh(fig: ArFigure & { kind: 'voxels' }): THREE.Object3D {
+  const { width, height, rgba } = fig
+  const size = FIGURE_SIZE / Math.max(width, height)
+  const solid: number[] = []
+  for (let i = 0; i < width * height; i++) if (rgba[i * 4 + 3] >= 128) solid.push(i)
+  // InstancedMesh: 1 draw call mesmo com 1024 cubinhos
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshLambertMaterial(), solid.length)
+  const m = new THREE.Matrix4()
+  const color = new THREE.Color()
+  solid.forEach((i, n) => {
+    const x = i % width
+    const y = Math.floor(i / width)
+    m.makeTranslation((x - (width - 1) / 2) * size, (y - (height - 1) / 2) * size, 0)
+    mesh.setMatrixAt(n, m)
+    mesh.setColorAt(n, color.setRGB(rgba[i * 4] / 255, rgba[i * 4 + 1] / 255, rgba[i * 4 + 2] / 255))
+  })
+  return mesh
+}
+
+function cardMesh(fig: ArFigure & { kind: 'card' }): THREE.Object3D {
+  const group = new THREE.Group()
+  createImageBitmap(new Blob([new Uint8Array(fig.data)], { type: fig.mime }))
+    .then((bmp) => {
+      // via canvas: CanvasTexture respeita flipY, ImageBitmap não
+      const canvas = document.createElement('canvas')
+      canvas.width = bmp.width
+      canvas.height = bmp.height
+      canvas.getContext('2d')!.drawImage(bmp, 0, 0)
+      const aspect = bmp.width / bmp.height
+      bmp.close()
+      const [w, h] = aspect >= 1 ? [FIGURE_SIZE, FIGURE_SIZE / aspect] : [FIGURE_SIZE * aspect, FIGURE_SIZE]
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, side: THREE.DoubleSide }),
+      )
+      plane.rotation.x = Math.PI // y do papel aponta para baixo: vira para a imagem ficar em pé
+      group.add(plane)
+    })
+    .catch((e: unknown) => console.warn('Imagem do AR inválida', e))
   return group
+}
+
+function buildFigure(what: ArShow): { object: THREE.Object3D; motion: 'spin' | 'wobble' } {
+  switch (what.kind) {
+    case 'heart':
+      return { object: voxelMesh(bitmapToRgba(BITMAPS.heart)), motion: 'spin' }
+    case 'lock':
+      return { object: voxelMesh(bitmapToRgba(BITMAPS.lock)), motion: 'wobble' }
+    case 'envelope':
+      return { object: voxelMesh(bitmapToRgba(BITMAPS.envelope)), motion: 'spin' }
+    case 'figure':
+      return what.figure.kind === 'voxels'
+        ? { object: voxelMesh(what.figure), motion: 'spin' }
+        : { object: cardMesh(what.figure), motion: 'wobble' }
+  }
+}
+
+function disposeTree(obj: THREE.Object3D) {
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    mesh.geometry?.dispose()
+    const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : []
+    mats.forEach((m) => {
+      ;(m as THREE.MeshBasicMaterial).map?.dispose()
+      m.dispose()
+    })
+  })
 }
 
 function labelSprite(): { sprite: THREE.Sprite; draw: (text: string) => void } {
   const canvas = document.createElement('canvas')
-  canvas.width = 256
+  canvas.width = 512
   canvas.height = 128
   const texture = new THREE.CanvasTexture(canvas)
   texture.magFilter = THREE.NearestFilter
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }))
-  sprite.scale.set(0.8, 0.4, 1)
   const draw = (text: string) => {
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.font = '600 72px "Pixelify Sans", monospace'
+    // texto curto ("7") grande; contagem ("2d 04h 13min") encolhe para caber
+    let size = 76
+    ctx.font = `600 ${size}px "Pixelify Sans", monospace`
+    while (size > 30 && ctx.measureText(text).width > canvas.width - 40) {
+      size -= 4
+      ctx.font = `600 ${size}px "Pixelify Sans", monospace`
+    }
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.lineWidth = 14
+    ctx.lineJoin = 'round'
     ctx.strokeStyle = '#4e2d22'
-    ctx.strokeText(text, 128, 64)
+    ctx.strokeText(text, canvas.width / 2, canvas.height / 2)
     ctx.fillStyle = '#fff4e0'
-    ctx.fillText(text, 128, 64)
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2)
     texture.needsUpdate = true
   }
   return { sprite, draw }
@@ -97,21 +211,35 @@ export function mountArOverlay(canvas: HTMLCanvasElement): ArOverlay {
 
   const spinner = new THREE.Group()
   spinner.position.z = -FLOAT
-  spinner.add(buildHeart())
   anchor.add(spinner)
+  let figure: THREE.Object3D | null = null
+  let motion: 'spin' | 'wobble' = 'spin'
+  let poppedAt = 0
 
   const label = labelSprite()
   label.sprite.position.set(0, -0.62, -FLOAT)
   anchor.add(label.sprite)
 
+  function show(what: ArShow) {
+    if (figure) {
+      spinner.remove(figure)
+      disposeTree(figure)
+    }
+    const built = buildFigure(what)
+    figure = built.object
+    motion = built.motion
+    spinner.add(figure)
+    poppedAt = performance.now() // cada figura nova entra com o "pop"
+  }
+  show({ kind: 'heart' })
+
   // pose suavizada: o detector treme alguns pixels e roda a ~15-30 Hz, o desenho a 60 Hz
   const target = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() }
   const current = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() }
   const scratch = new THREE.Matrix4()
-  const unit = new THREE.Vector3()
+  const scale = new THREE.Vector3()
   let hasPose = false
   let lastSeen = 0
-  let shownAt = 0
   let size = { w: 0, h: 0 }
 
   function resize(w: number, h: number, f: number) {
@@ -132,14 +260,14 @@ export function mountArOverlay(canvas: HTMLCanvasElement): ArOverlay {
     const { R, t } = pose
     // OpenCV (y baixo, z frente) → three.js (y cima, z para trás): inverte as linhas y e z
     scratch.set(R[0], R[1], R[2], t[0], -R[3], -R[4], -R[5], -t[1], -R[6], -R[7], -R[8], -t[2], 0, 0, 0, 1)
-    scratch.decompose(target.pos, target.quat, unit)
+    scratch.decompose(target.pos, target.quat, scale)
     if (!hasPose) {
       current.pos.copy(target.pos)
       current.quat.copy(target.quat)
       hasPose = true
     }
     const now = performance.now()
-    if (!anchor.visible) shownAt = now
+    if (now - lastSeen > LOST_MS) poppedAt = now // QR voltou à vista: pop de novo
     lastSeen = now
   }
 
@@ -155,13 +283,14 @@ export function mountArOverlay(canvas: HTMLCanvasElement): ArOverlay {
     }
     current.pos.lerp(target.pos, 0.35)
     current.quat.slerp(target.quat, 0.35)
-    anchor.matrix.compose(current.pos, current.quat, unit.set(1, 1, 1))
+    anchor.matrix.compose(current.pos, current.quat, scale.set(1, 1, 1))
 
     const t = clock.getElapsedTime()
-    const pop = easeOutBack(Math.min(1, (now - shownAt) / 500))
+    const pop = easeOutBack(Math.min(1, (now - poppedAt) / 500))
     spinner.scale.setScalar(pop)
-    label.sprite.scale.set(0.8 * pop, 0.4 * pop, 1)
-    spinner.rotation.y = t * 2.2 // gira como moeda em torno do eixo "vertical" do papel
+    label.sprite.scale.set(1.6 * pop, 0.4 * pop, 1)
+    // gira como moeda; cadeado e cartão só balançam para dar para ler/ver de frente
+    spinner.rotation.y = motion === 'spin' ? t * 2.2 : Math.sin(t * 1.6) * 0.45
     spinner.position.z = -FLOAT - Math.sin(t * 3) * 0.06
     renderer.render(scene, camera)
   }
@@ -169,6 +298,7 @@ export function mountArOverlay(canvas: HTMLCanvasElement): ArOverlay {
 
   return {
     update,
+    show,
     setLabel: (text) => {
       label.draw(text)
       // a fonte pixel pode chegar depois: redesenha quando carregar
@@ -176,6 +306,7 @@ export function mountArOverlay(canvas: HTMLCanvasElement): ArOverlay {
     },
     dispose() {
       cancelAnimationFrame(raf)
+      if (figure) disposeTree(figure)
       renderer.dispose()
     },
   }

@@ -1,6 +1,6 @@
 /** Caso de uso: lacrar uma carta para um envelope (roda só no SEU computador). */
 import type { EnvelopeId, LetterContent, Trip } from '../domain'
-import { DomainError, MAX_PHOTO_BYTES, opensAt } from '../domain'
+import { DomainError, MAX_PHOTO_BYTES, arFigureProblem, opensAt } from '../domain'
 import { concat, toB64url } from '../shared/bytes'
 import { encodeLetter } from './letter-codec'
 import type { SealedLetterWriter, SymmetricCipher, TimeLock } from './ports'
@@ -22,6 +22,8 @@ export function makeSealLetter({ trip, cipher, timeLock, writer }: SealLetterDep
     if (content.photo && content.photo.data.length > MAX_PHOTO_BYTES) {
       throw new DomainError(`Foto maior que ${MAX_PHOTO_BYTES / 1024} KB; comprima antes`)
     }
+    const arProblem = content.ar && arFigureProblem(content.ar)
+    if (arProblem) throw new DomainError(arProblem)
     const when = opensAt(trip, envelopeId)
 
     // 1. corpo com uma chave nova, só desta carta

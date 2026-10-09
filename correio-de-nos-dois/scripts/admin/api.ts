@@ -8,18 +8,25 @@
  *   GET    /__admin/api/photo/:id        bytes da foto (para pré-visualizar)
  *   PUT    /__admin/api/photo/:id        corpo = imagem (image/webp ou image/jpeg)
  *   DELETE /__admin/api/photo/:id
+ *   GET    /__admin/api/ar/:id           figura de AR do rascunho (JSON, bytes em base64url)
+ *   PUT    /__admin/api/ar/:id           { kind: 'voxels', width, height, rgba } | { kind: 'card', mime, data }
+ *   DELETE /__admin/api/ar/:id           volta ao coração padrão
  *   POST   /__admin/api/seal/:id         lacra → public/letters/NN.json
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { MAX_PHOTO_BYTES } from '../../src/domain'
+import { MAX_AR_CARD_BYTES, MAX_PHOTO_BYTES, type ArFigure } from '../../src/domain'
+import { fromB64url, toB64url } from '../../src/shared/bytes'
 import {
   allEnvelopeStatus,
   assertEnvelope,
+  deleteDraftAr,
   deleteDraftPhoto,
   envelopeStatus,
+  readDraftAr,
   readDraftPhoto,
   readDraftText,
   sealEnvelope,
+  writeDraftAr,
   writeDraftPhoto,
   writeDraftText,
 } from '../letters'
@@ -69,7 +76,7 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse): Pr
   try {
     if (!allowed(req)) throw new HttpError(403, 'Só no seu computador')
     const path = new URL(req.url ?? '/', 'http://x').pathname
-    const m = path.match(/^\/api\/(envelopes|draft|photo|seal)(?:\/(\d+))?$/)
+    const m = path.match(/^\/api\/(envelopes|draft|photo|ar|seal)(?:\/(\d+))?$/)
     if (!m) throw new HttpError(404, 'Rota desconhecida')
     const [, route, idText] = m
     const id = Number(idText)
@@ -112,6 +119,41 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse): Pr
 
       case 'DELETE photo':
         await deleteDraftPhoto(id)
+        return send(res, 200, await envelopeStatus(id))
+
+      case 'GET ar': {
+        const fig = await readDraftAr(id)
+        if (!fig) return send(res, 200, null)
+        return send(
+          res,
+          200,
+          fig.kind === 'voxels'
+            ? { kind: 'voxels', width: fig.width, height: fig.height, rgba: toB64url(fig.rgba) }
+            : { kind: 'card', mime: fig.mime, data: toB64url(fig.data) },
+        )
+      }
+
+      case 'PUT ar': {
+        // base64 cresce ~4/3: o limite do corpo acompanha o do cartão
+        const body = JSON.parse((await readBody(req, MAX_AR_CARD_BYTES * 2)).toString('utf8')) as Record<string, unknown>
+        let fig: ArFigure
+        if (body.kind === 'voxels' && typeof body.rgba === 'string') {
+          fig = { kind: 'voxels', width: Number(body.width), height: Number(body.height), rgba: fromB64url(body.rgba) }
+        } else if (body.kind === 'card' && typeof body.data === 'string' && typeof body.mime === 'string') {
+          fig = { kind: 'card', mime: body.mime, data: fromB64url(body.data) }
+        } else {
+          throw new HttpError(400, 'Figura inválida')
+        }
+        try {
+          await writeDraftAr(id, fig)
+        } catch (e) {
+          throw new HttpError(400, (e as Error).message)
+        }
+        return send(res, 200, await envelopeStatus(id))
+      }
+
+      case 'DELETE ar':
+        await deleteDraftAr(id)
         return send(res, 200, await envelopeStatus(id))
 
       case 'POST seal': {

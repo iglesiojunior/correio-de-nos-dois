@@ -33,6 +33,9 @@ npm run dev          # app em http://localhost:5173 e painel admin em /admin.htm
 
 1. `npm run dev` e abra **http://localhost:5173/admin.html**.
 2. Escolha o envelope, escreva a carta e, se quiser, anexe uma foto (é comprimida para até 600 KB).
+   Em **Figura em AR**, escolha a imagem que aparece flutuando sobre o QR quando a carta abre:
+   PNG de até 32x32 com fundo transparente vira um objeto 3D de cubinhos; imagem maior vira um cartão.
+   Sem figura, aparece um coração. A figura vai cifrada dentro da carta, então não estraga a surpresa.
 3. Clique em **Lacrar**. A carta cifrada vai para `public/letters/NN.json`.
 4. Commit de `public/letters/` e push: a Vercel publica.
 
@@ -40,6 +43,7 @@ Pode lacrar todas com antecedência: nenhuma abre antes do dia dela. Mudou o tex
 de um envelope? Lacre de novo (o painel avisa quando o rascunho mudou depois do lacre).
 
 Sem o painel: escreva `secrets/cartas/09.txt` (+ `09.webp`/`09.jpg` opcional) e rode `npm run seal -- 9`.
+A figura de AR é preparada pelo painel (`09.ar.json` ou `09.ar.webp`), porque o PNG é decodificado no navegador.
 
 O painel só existe no `npm run dev`. Ele não entra no build, e a API dele só aceita
 conexões da própria máquina vindas da própria página.

@@ -42,6 +42,24 @@ describe('lacrar e abrir', () => {
     expect([...opened.photo!.data]).toEqual([1, 2, 3, 250])
   })
 
+  it('guarda a figura de AR (pixel art e cartão) junto, cifrada', async () => {
+    const rgba = new Uint8Array(2 * 1 * 4).fill(255)
+    await seal(2, paperKey, { text: 'oi', ar: { kind: 'voxels', width: 2, height: 1, rgba } })
+    await seal(3, paperKey, { text: 'oi', ar: { kind: 'card', mime: 'image/webp', data: new Uint8Array([7, 8]) } })
+    clock.set('2026-10-16T09:00:00-03:00')
+    const voxels = (await open(2, paperKey)).ar
+    expect(voxels?.kind === 'voxels' && [voxels.width, voxels.height, voxels.rgba.length]).toEqual([2, 1, 8])
+    const card = (await open(3, paperKey)).ar
+    expect(card?.kind === 'card' && [...card.data]).toEqual([7, 8])
+  })
+
+  it('recusa pixel art grande demais ou toda transparente', async () => {
+    const big = { kind: 'voxels' as const, width: 33, height: 1, rgba: new Uint8Array(33 * 4).fill(255) }
+    await expect(seal(2, paperKey, { text: 'oi', ar: big })).rejects.toThrow(/32x32/)
+    const empty = { kind: 'voxels' as const, width: 2, height: 2, rgba: new Uint8Array(16) }
+    await expect(seal(2, paperKey, { text: 'oi', ar: empty })).rejects.toThrow(/transparente/)
+  })
+
   it('não abre antes da hora', async () => {
     await seal(9, paperKey, { text: 'x' })
     clock.set('2026-10-22T07:59:59-03:00')

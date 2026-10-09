@@ -2,7 +2,7 @@
  * App dela: "Hoje" (qual envelope abrir e o leitor de QR) e "Envelopes" (grade para reler).
  * Toda regra vem do domínio e dos casos de uso; aqui só tem tela.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Container } from '../app/container'
 import {
   DomainError,
@@ -86,25 +86,41 @@ export function App({ container }: { container: Container }) {
     return () => window.clearInterval(t)
   }, [clock])
 
-  // abrir um envelope (vindo do QR, do leitor ou da grade)
+  /** Decifra o envelope e devolve a tela resultante (carta ou erro). Usado pela tela "abrindo" e pelo leitor. */
+  const resolveOpening = useCallback(
+    async (id: EnvelopeId, paperKey: Uint8Array): Promise<Exclude<Sheet, null>> => {
+      try {
+        const content = await openEnvelope(id, paperKey)
+        store.markOpened(id, clock.now())
+        return { kind: 'letter', id, content }
+      } catch (e) {
+        return errorSheet(e, id)!
+      }
+    },
+    [openEnvelope, store, clock],
+  )
+
+  /** Mostra a tela vinda do leitor ou da abertura e atualiza a grade (a carta pode ter acabado de abrir). */
+  const showSheet = useCallback(
+    (next: Sheet) => {
+      setRecords(store.all())
+      setSheet(next)
+    },
+    [store],
+  )
+
+  // abrir um envelope (vindo do link do QR ou da grade)
   const opening = sheet?.kind === 'opening' ? sheet : null
   useEffect(() => {
     if (!opening) return
     let cancelled = false
-    openEnvelope(opening.id, opening.paperKey)
-      .then((content) => {
-        if (cancelled) return
-        store.markOpened(opening.id, clock.now())
-        setRecords(store.all())
-        setSheet({ kind: 'letter', id: opening.id, content })
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setSheet(errorSheet(e, opening.id))
-      })
+    resolveOpening(opening.id, opening.paperKey).then((next) => {
+      if (!cancelled) showSheet(next)
+    })
     return () => {
       cancelled = true
     }
-  }, [opening, openEnvelope, store, clock])
+  }, [opening, resolveOpening, showSheet])
 
   const ids = useMemo(() => envelopeIds(trip), [trip])
   const todayId = currentEnvelope(trip, now)
@@ -270,7 +286,7 @@ export function App({ container }: { container: Container }) {
       </div>
 
       {sheet?.kind === 'scanner' ? (
-        <Scanner container={container} onClose={() => setSheet(null)} onSheet={setSheet} />
+        <Scanner container={container} resolve={resolveOpening} onClose={() => setSheet(null)} onSheet={showSheet} />
       ) : (
         sheet && <SheetView sheet={sheet} container={container} onClose={() => setSheet(null)} />
       )}
@@ -393,39 +409,46 @@ function InstallCard() {
 }
 
 /** Quanto tempo a figura de AR fica na tela antes de abrir a carta. */
-const AR_REVEAL_MS = 2200
+const AR_REVEAL_MS = 2600
+
+type ScanPhase =
+  | { kind: 'searching' }
+  | { kind: 'locked'; id: EnvelopeId; when: Date; left: string }
+  | { kind: 'opening'; id: EnvelopeId }
+  | { kind: 'revealing'; id: EnvelopeId }
 
 /**
- * Leitor em tela cheia. Ao achar um envelope, mostra um coração em AR preso ao QR
- * (pose calculada pelos 4 cantos) e depois abre a carta. Sem WebGL ou sem cantos, abre direto.
+ * Leitor em tela cheia com AR preso ao QR (pose pelos 4 cantos):
+ * - envelope ainda lacrado: cadeado fechado e contagem regressiva, a câmera fica aberta;
+ * - liberado: envelope girando enquanto decifra, depois a figura da carta (ou o coração) e a carta abre.
+ * Sem WebGL ou sem cantos, pula a AR e mostra direto a tela de resultado.
  */
 function Scanner({
   container,
+  resolve,
   onClose,
   onSheet,
 }: {
   container: Container
+  resolve: (id: EnvelopeId, paperKey: Uint8Array) => Promise<Exclude<Sheet, null>>
   onClose: () => void
   onSheet: (s: Sheet) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [problem, setProblem] = useState<string | null>(null)
-  const [found, setFound] = useState<EnvelopeId | null>(null)
+  const [phase, setPhase] = useState<ScanPhase>({ kind: 'searching' })
   const openNow = useRef<() => void>(() => {})
 
   useEffect(() => {
+    const { trip, clock, store } = container
     let stop: (() => void) | undefined
     let cancelled = false
     let ar: ArOverlay | null = null
+    let sawCorners = false
     let link: { envelopeId: EnvelopeId; paperKey: Uint8Array; text: string } | null = null
-    let openTimer = 0
-
-    const open = () => {
-      if (!link) return
-      stop?.()
-      onSheet({ kind: 'opening', id: link.envelopeId, paperKey: link.paperKey })
-    }
+    let revealTimer = 0
+    let tick = 0
 
     import('./ar/ar-overlay')
       .then(({ mountArOverlay }) => {
@@ -433,23 +456,66 @@ function Scanner({
       })
       .catch((e: unknown) => console.warn('AR indisponível', e))
 
+    const finish = (next: Exclude<Sheet, null>) => {
+      if (!cancelled) onSheet(next)
+    }
+
+    const startOpening = (id: EnvelopeId, paperKey: Uint8Array) => {
+      setPhase({ kind: 'opening', id })
+      ar?.show({ kind: 'envelope' })
+      ar?.setLabel('abrindo…')
+      resolve(id, paperKey).then((next) => {
+        if (cancelled) return
+        if (next.kind !== 'letter' || !ar || !sawCorners) return finish(next)
+        ar.show(next.content.ar ? { kind: 'figure', figure: next.content.ar } : { kind: 'heart' })
+        ar.setLabel(`${id} ♥`)
+        setPhase({ kind: 'revealing', id })
+        openNow.current = () => {
+          window.clearTimeout(revealTimer)
+          finish(next)
+        }
+        revealTimer = window.setTimeout(() => finish(next), AR_REVEAL_MS)
+      })
+    }
+
+    const startLocked = (id: EnvelopeId, paperKey: Uint8Array) => {
+      const when = opensAt(trip, id)
+      ar?.show({ kind: 'lock' })
+      const refresh = () => {
+        const ms = when.getTime() - clock.now().getTime()
+        if (ms <= 0) {
+          // chegou a hora com a câmera aberta: abre ali mesmo
+          window.clearInterval(tick)
+          return startOpening(id, paperKey)
+        }
+        const left = countdown(ms)
+        ar?.setLabel(left)
+        setPhase({ kind: 'locked', id, when, left })
+      }
+      refresh()
+      tick = window.setInterval(refresh, 1000)
+    }
+
     const onFrame = (hit: QrHit | null) => {
+      if (hit?.corners.length === 4) sawCorners = true
       if (!link && hit) {
         try {
           const parsed = parseEnvelopeLink(hit.text)
           link = { ...parsed, text: hit.text }
         } catch {
-          stop?.()
-          onSheet({ kind: 'error', title: 'Código estranho', text: 'Esse QR não parece ser de um envelope do nosso correio.' })
-          return
+          return finish({ kind: 'error', title: 'Código estranho', text: 'Esse QR não parece ser de um envelope do nosso correio.' })
         }
-        container.store.rememberKey(link.envelopeId, link.paperKey)
-        setFound(link.envelopeId)
-        ar?.setLabel(String(link.envelopeId))
-        // sem cantos ou sem AR não há o que mostrar: abre quase direto
-        openTimer = window.setTimeout(open, ar && hit.corners.length === 4 ? AR_REVEAL_MS : 400)
+        store.rememberKey(link.envelopeId, link.paperKey)
+        const when = opensAt(trip, link.envelopeId)
+        if (clock.now() < when) {
+          // sem AR não há cadeado para mostrar: vai direto para a tela "ainda não é o dia"
+          if (!ar || !sawCorners) return finish({ kind: 'early', id: link.envelopeId, when })
+          startLocked(link.envelopeId, link.paperKey)
+        } else {
+          startOpening(link.envelopeId, link.paperKey)
+        }
       }
-      // só segue o QR do envelope encontrado (outro QR na mesa não puxa o coração)
+      // só segue o QR do envelope encontrado (outro QR na mesa não puxa a figura)
       ar?.update(hit && link && hit.text === link.text ? hit : null)
     }
 
@@ -461,24 +527,20 @@ function Scanner({
       })
       .catch(() => setProblem('Não consegui usar a câmera. Permita o acesso ou use a câmera do celular apontando para o código.'))
 
-    // botão "Abrir agora": pula o resto da animação
-    openNow.current = () => {
-      window.clearTimeout(openTimer)
-      open()
-    }
     return () => {
       cancelled = true
-      window.clearTimeout(openTimer)
+      window.clearTimeout(revealTimer)
+      window.clearInterval(tick)
       stop?.()
       ar?.dispose()
     }
-  }, [container, onSheet])
+  }, [container, resolve, onSheet])
 
   return (
     <div className="scan" role="dialog" aria-label="Escanear envelope">
       <video ref={videoRef} muted playsInline />
       <canvas ref={canvasRef} className="ar" aria-hidden="true" />
-      {found === null && <div className="scan-frame" aria-hidden="true" />}
+      {phase.kind === 'searching' && <div className="scan-frame" aria-hidden="true" />}
       <div className="scan-top">
         <b>Escanear envelope</b>
         <button className="x" onClick={onClose} aria-label="Fechar">
@@ -486,14 +548,25 @@ function Scanner({
         </button>
       </div>
       <div className="scan-bottom">
-        {found === null ? (
-          <p>{problem ?? 'Aponte para o código colado no envelope.'}</p>
-        ) : (
+        {phase.kind === 'searching' && <p>{problem ?? 'Aponte para o código colado no envelope.'}</p>}
+        {phase.kind === 'locked' && (
           <>
-            <p>Envelope {found} encontrado ♥</p>
+            <p>
+              <Px name="lock" /> O envelope {phase.id} ainda está trancado
+            </p>
+            <p className="scan-count">{phase.left}</p>
+            <p className="scan-small">
+              Abre {fmtLong(phase.when)}, às {fmtTime(phase.when)}.
+            </p>
+          </>
+        )}
+        {phase.kind === 'opening' && <p>Abrindo o envelope {phase.id}…</p>}
+        {phase.kind === 'revealing' && (
+          <>
+            <p>Envelope {phase.id} aberto ♥</p>
             <button className="btn" onClick={() => openNow.current()}>
               <Px name="envOpen" />
-              Abrir agora
+              Ler a carta
             </button>
           </>
         )}

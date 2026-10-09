@@ -60,6 +60,13 @@ button, textarea, input { font: inherit; color: inherit; }
 .adm-file { display: block; width: 100%; padding: 12px; border: 2px dashed var(--ink-soft); cursor: pointer; color: var(--ink-soft); }
 .adm-file input { display: none; }
 
+.adm-ar { margin-top: 16px; padding-top: 12px; border-top: 2px dashed var(--parch-lo); }
+.adm-ar-title { margin: 0; font-weight: 600; }
+.adm-ar .adm-photo div { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.adm-ar-img { image-rendering: pixelated; object-fit: contain !important; background: repeating-conic-gradient(#efe1c8 0 25%, #fff4e0 0 50%) 0 0 / 16px 16px; }
+.adm-ar-default { width: 120px; height: 120px; display: grid; place-items: center; font-size: 64px; color: var(--rose); border: 2px dashed var(--ink-soft); flex: none; }
+.adm-file-inline { width: auto; padding: 6px 12px; color: var(--ink); }
+.adm-hint { font-size: 13px; color: var(--ink-soft); }
 .adm-actions { display: flex; gap: 8px; margin-top: 16px; }
 .adm-actions button, .adm-photo button {
   padding: 8px 14px; background: var(--parch-hi); border: 2px solid var(--outline);

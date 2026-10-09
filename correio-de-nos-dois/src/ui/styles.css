@@ -131,6 +131,9 @@ p { margin: 0; }
 .scan-bottom { bottom: 0; flex-direction: column; padding-bottom: max(20px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(29, 19, 16, .8)); }
 .scan-bottom p { margin: 0; text-align: center; font-size: 1.1rem; text-shadow: 2px 2px 0 var(--outline); }
 .scan-bottom .btn { max-width: 320px; }
+.scan-bottom p svg { width: 22px; height: 22px; vertical-align: -4px; }
+.scan-count { font-size: 2rem !important; color: var(--gold); }
+.scan-small { font-size: .95rem !important; opacity: .9; }
 .scan-frame { position: absolute; left: 50%; top: 50%; width: min(70vw, 70vh, 340px); aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none;
   background:
     linear-gradient(var(--gold), var(--gold)) left top / 34px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) left top / 6px 34px no-repeat,
