@@ -205,6 +205,8 @@ export function mountScene(canvas: HTMLCanvasElement, initial: SceneState): Scen
     camera.aspect=w/h;const vf=T.MathUtils.degToRad(camera.fov),tv=Math.tan(vf/2),hf=2*Math.atan(tv*camera.aspect);
     const narrow=w<640,portrait=h>w;
     const d=Math.max(24,13.2/Math.tan(hf/2)+3);
+    // neblina relativa à câmera: em celular em pé d passa de 100 e uma neblina fixa (34..80) apagava o cenário
+    scene.fog.near=d+5;scene.fog.far=d+51;
     // onde o horizonte e a base das casas caem na tela (fração da altura)
     const yh=narrow?.1:.1,yb=narrow?.31:portrait?.34:.40;
     const p=Math.atan((1-2*yh)*tv),ab=Math.atan((1-2*yb)*tv),camH=d*Math.tan(p-ab);

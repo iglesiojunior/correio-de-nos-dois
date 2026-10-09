@@ -1,7 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/((?!letters/|assets/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/((?!letters/|assets/|api/).*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
-    { "source": "/letters/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    {
+      "source": "/letters/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/push",
+      "schedule": "0 11 * * *"
+    }
   ]
 }

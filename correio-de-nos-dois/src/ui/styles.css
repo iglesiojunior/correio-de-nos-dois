@@ -113,6 +113,8 @@ p { margin: 0; }
 .photo img { display: block; width: 100%; max-width: 100%; height: auto; }
 .replies { display: flex; flex-wrap: wrap; gap: 10px; }
 
+.install { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.install p { margin: 0; }
 .msg { display: flex; gap: 12px; align-items: center; padding: 12px; }
 .msg > svg { width: 44px; height: 40px; flex: none; }
 .loading { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 18px; }

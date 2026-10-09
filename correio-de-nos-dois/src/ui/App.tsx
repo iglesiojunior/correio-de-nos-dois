@@ -15,6 +15,8 @@ import {
 } from '../domain'
 import { OPEN_PATH, canScanInApp, parseEnvelopeLink, startQrScanner } from '../infrastructure'
 import { Background } from './Background'
+import { useInstall } from './install'
+import { usePush } from './push'
 import { phaseOf } from './phase'
 import { Px } from './pixel'
 import { VINE_TILE } from './pixel-data'
@@ -229,6 +231,8 @@ export function App({ container }: { container: Container }) {
                     <li><span className="n">3</span><span>Você escaneia o código e a carta aparece aqui. Depois dá para reler quando quiser.</span></li>
                   </ol>
                 </section>
+                <PushCard />
+                <InstallCard />
               </>
             )}
 
@@ -320,6 +324,69 @@ function SheetView({
         )}
       </div>
     </div>
+  )
+}
+
+/** Convite para ligar o aviso das 08:00. Some onde push não existe (ex.: dev sem service worker). */
+function PushCard() {
+  const { state, enable } = usePush()
+  if (state === 'checking' || state === 'unsupported') return null
+  return (
+    <section className="parch install">
+      <p className="steps-title">Aviso de carta nova</p>
+      {(state === 'off' || state === 'busy' || state === 'error') && (
+        <>
+          <p className="soft">Quer que o celular avise às 08:00, quando o envelope do dia liberar?</p>
+          <button className="btn" onClick={() => void enable()} disabled={state === 'busy'}>
+            <Px name="bell" />
+            {state === 'busy' ? 'Ligando…' : 'Me avisar às 08:00'}
+          </button>
+          {state === 'error' && <p className="soft">Não deu certo agora. Confira a internet e tente de novo.</p>}
+        </>
+      )}
+      {state === 'on' && (
+        <p className="soft">
+          <Px name="check" /> Avisos ligados: às 08:00 de cada dia de envelope.
+        </p>
+      )}
+      {state === 'denied' && (
+        <p className="soft">
+          As notificações estão bloqueadas. No Chrome, toque no cadeado ao lado do endereço, depois em
+          <b> Permissões → Notificações</b>, e libere.
+        </p>
+      )}
+      {state === 'needs-install' && (
+        <p className="soft">No iPhone, os avisos só funcionam com o app instalado na tela inicial (veja abaixo).</p>
+      )}
+    </section>
+  )
+}
+
+/** Convite para pôr o app na tela inicial. Some quando já está instalado. */
+function InstallCard() {
+  const state = useInstall()
+  if (state.kind === 'installed') return null
+  return (
+    <section className="parch install">
+      <p className="steps-title">Deixe na tela inicial</p>
+      {state.kind === 'prompt' && (
+        <>
+          <p className="soft">Instale o Correio como um app: abre direto, em tela cheia, sem procurar o link.</p>
+          <button className="btn" onClick={() => void state.install()}>
+            <Px name="envOpen" />
+            Instalar o app
+          </button>
+        </>
+      )}
+      {state.kind === 'ios' && (
+        <p className="soft">No Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.</p>
+      )}
+      {state.kind === 'manual' && (
+        <p className="soft">
+          No Chrome, toque no menu <b>⋮</b> e depois em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.
+        </p>
+      )}
+    </section>
   )
 }
 

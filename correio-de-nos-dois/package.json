@@ -14,13 +14,15 @@
     "test:net": "vitest run --mode net drand",
     "keys": "tsx scripts/generate-keys.ts",
     "seal": "tsx scripts/seal.ts",
-    "poc:timelock": "tsx scripts/poc-timelock.ts"
+    "poc:timelock": "tsx scripts/poc-timelock.ts",
+    "push:keys": "tsx scripts/push-keys.ts"
   },
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.128.0",
-    "tlock-js": "^0.9.0"
+    "tlock-js": "^0.9.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,6 +30,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/three": "^0.128.0",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",

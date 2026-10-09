@@ -26,3 +26,10 @@ export const SIGNATURE = 'com amor, Iglésio'
  * Vazio: os botões de resposta não aparecem.
  */
 export const WHATSAPP_NUMBER = ''
+
+/**
+ * Chave pública VAPID das notificações push (gerada por `npm run push:keys`). Pública de propósito:
+ * o navegador dela usa para aceitar só pushes assinados pela chave privada, que fica na Vercel.
+ * Vazio: o convite de notificações não aparece.
+ */
+export const PUSH_PUBLIC_KEY = 'BDBXTUmSN6373pB137zJoX5isoPRg-lpMtqaxdqggfVSB_JgEfuINkhFEEHCpb1Eq48NdF1JLPqXPJ50AliDOig'
