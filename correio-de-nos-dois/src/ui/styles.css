@@ -121,14 +121,23 @@ p { margin: 0; }
 .loading svg { width: 40px; height: 28px; animation: bob .6s steps(2) infinite alternate; }
 @keyframes bob { to { transform: translateY(-4px); } }
 
-.viewfinder { position: relative; aspect-ratio: 1; width: min(100%, 300px); max-width: 100%; align-self: center; background: #3a2a26; overflow: hidden; box-shadow: 0 0 0 4px var(--outline); }
-.viewfinder video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.viewfinder::after { content: ''; position: absolute; inset: 16%; pointer-events: none;
+/* Leitor em tela cheia: vídeo e canvas de AR empilhados com o mesmo object-fit (pixels alinhados) */
+.scan { position: fixed; inset: 0; z-index: 30; background: #1d1310; overflow: hidden; }
+.scan video, .scan canvas.ar { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan canvas.ar { pointer-events: none; image-rendering: pixelated; }
+.scan-top, .scan-bottom { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--parch-hi); }
+.scan-top { top: 0; justify-content: space-between; padding-top: max(14px, env(safe-area-inset-top)); background: linear-gradient(rgba(29, 19, 16, .75), transparent); }
+.scan-top b { font-size: 1.25rem; text-shadow: 2px 2px 0 var(--outline); }
+.scan-bottom { bottom: 0; flex-direction: column; padding-bottom: max(20px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(29, 19, 16, .8)); }
+.scan-bottom p { margin: 0; text-align: center; font-size: 1.1rem; text-shadow: 2px 2px 0 var(--outline); }
+.scan-bottom .btn { max-width: 320px; }
+.scan-frame { position: absolute; left: 50%; top: 50%; width: min(70vw, 70vh, 340px); aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none;
   background:
-    linear-gradient(var(--gold), var(--gold)) left top / 26px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) left top / 6px 26px no-repeat,
-    linear-gradient(var(--gold), var(--gold)) right top / 26px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) right top / 6px 26px no-repeat,
-    linear-gradient(var(--gold), var(--gold)) left bottom / 26px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) left bottom / 6px 26px no-repeat,
-    linear-gradient(var(--gold), var(--gold)) right bottom / 26px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) right bottom / 6px 26px no-repeat; }
+    linear-gradient(var(--gold), var(--gold)) left top / 34px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) left top / 6px 34px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) right top / 34px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) right top / 6px 34px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) left bottom / 34px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) left bottom / 6px 34px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) right bottom / 34px 6px no-repeat, linear-gradient(var(--gold), var(--gold)) right bottom / 6px 34px no-repeat; }
+
 
 @media (max-width: 420px) {
   .logo h1 { font-size: 2.15rem; }

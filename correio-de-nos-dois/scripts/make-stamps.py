@@ -1,10 +1,11 @@
 """
-Gera os selos em pixel art (A4, 3 x 3 por folha) com o QR de cada envelope.
+Gera os selos decorativos em pixel art (A4, 4 x 4 por folha), um por envelope.
+O QR NÃO fica no selo: ele vai no cartão de dentro (scripts/make-cards.py).
 
     python scripts/make-stamps.py
 
 Lê secrets/labels-config.json (escrito por `npm run keys`) e grava secrets/selos.pdf.
-O PDF contém as chaves: trate como segredo.
+Sem chaves no PDF: pode mandar para a gráfica à vontade.
 Para a gráfica: vinil FOSCO, impressão em 100%, corte reto nas marcas de canto.
 """
 import json
@@ -53,8 +54,8 @@ FONT = {
     "♥": ".#.#.##########.###...#............",
 }
 ACCENTS = {"Á": ("A", "´"), "É": ("E", "´"), "Í": ("I", "´"), "Ó": ("O", "´"), "Ú": ("U", "´"),
-           "Ã": ("A", "~"), "Õ": ("O", "~"), "Ê": ("E", "^"), "Ô": ("O", "^"), "Â": ("A", "^"), "Ç": ("C", "¸")}
-MARKS = {"´": [(3, -2), (2, -1)], "~": [(1, -2), (2, -1), (3, -2), (4, -1)], "^": [(2, -2), (1, -1), (3, -1)], "¸": [(2, 7), (1, 8)]}
+           "Ã": ("A", "~"), "Õ": ("O", "~"), "Ê": ("E", "^"), "Ô": ("O", "^"), "Â": ("A", "^"), "Ç": ("C", "¸"), "À": ("A", "`")}
+MARKS = {"´": [(3, -2), (2, -1)], "~": [(1, -2), (2, -1), (3, -2), (4, -1)], "^": [(2, -2), (1, -1), (3, -1)], "¸": [(2, 7), (1, 8)], "`": [(1, -2), (2, -1)]}
 
 
 def text_width(text: str, px: float) -> float:
@@ -84,7 +85,7 @@ def centered_text(c, text, cx, y_top, px, color):
 # ------------------------------------------------------------------ desenhos (originais)
 PAL = {"O": "#4e2d22", "R": "#d9434f", "L": "#ff9aa2", "W": "#fff4e0", "C": "#fbe6c8", "Y": "#f2bf4b",
        "D": "#c98f2a", "T": "#a0643a", "t": "#d98a5a", "G": "#5e9a4c", "g": "#8cc06a", "B": "#5aa7c9",
-       "b": "#9fd3e0", "P": "#b48ad8", "p": "#e0c8f2", "K": "#2b2b2b", "S": "#f4d3b0", "N": "#f7a8b8"}
+       "b": "#9fd3e0", "P": "#b48ad8", "p": "#e0c8f2", "K": "#2b2b2b", "S": "#f4d3b0", "N": "#f7a8b8", "V": "#7b4fb0", "v": "#b48ad8", "l": "#e9dcf7", "M": "#9a9aac", "m": "#e2e2ec"}
 
 ART = {
     "coracao": [
@@ -137,6 +138,34 @@ ART = {
         "..OGGGGGGGGO.", "...OOGgGOOO..", ".....OGGO....", "...OOOOOOO...", "...OTTTTTO...",
         "....OTTTO....", "....OOOOO...."],
 }
+ART.update({
+    "baleia": [
+        ".b.b.........", "..b..........", "..b..........", "..OOOOOO..OO.", ".OvvvvvvO.OvO",
+        "OvvvvvvvvOvvO", "OvKvvvvvvvvO.", "OvvvvvvvvvvO.", "OlllllllllO..", ".OllllllOO...",
+        "..OOOOOO....."],
+    "dinamite": [
+        ".....Y.Y.....", "......Y......", ".....Y.Y.....", "......O......", ".OOO.OOO.OOO.",
+        ".ORO.ORO.ORO.", ".ORO.ORO.ORO.", "OWWWWWWWWWWWO", ".ORO.ORO.ORO.", ".ORO.ORO.ORO.",
+        ".ORO.ORO.ORO.", ".OOO.OOO.OOO."],
+    "manteiga": [
+        "..OOOOOOOOOOO..", ".OYWWYYYYYYYYO.", ".OYYYYYYYYYYYO.", ".OYYYYYYYYYYYO.",
+        ".ODDDDDDDDDDDO.", "..OOOOOOOOOOO..", "OmmmmmmmmmmmmmO", ".OOOOOOOOOOOOO."],
+    "cerejeira": [
+        "......LL......", ".....LNNL.....", "..LL.LNNL.LL..", ".LNNLLYYLLNNL.", ".LNNNYYYYNNNL.",
+        "..LLNYYYYNLL..", "...LNNLLNNL...", "..LNNL..LNNL..", "..LLL....LLL..", "N..........N..",
+        "......N......."],
+})
+
+# Selos extras com referências ao universo do BTS (desenhos originais, sem marcas registradas).
+# Colados AO LADO do selo normal nos envelopes dos dias do show.
+SPECIALS = [
+    ("baleia", "BORAHAE ♥"),
+    ("dinamite", "DYNAMITE!"),
+    ("manteiga", "BUTTER ♥"),
+    ("cerejeira", "SPRING DAY"),
+]
+SPECIAL_BACKS = [("#b48ad8", "#e9dcf7"), ("#9f7fd0", "#ddd0f3")]
+
 ART_ORDER = ["envelope", "aviao", "sol", "cafe", "gato", "carnauba", "lua", "sorvete", "flor",
              "pombo", "coracao", "casa", "cacto"]
 
@@ -153,9 +182,9 @@ CAPTIONS = [
 ]
 
 # ------------------------------------------------------------------ geometria
-STAMP_W, STAMP_H = 52 * mm, 74 * mm
-COLS, ROWS = 3, 3
-GAP = 8 * mm
+STAMP_W, STAMP_H = 42 * mm, 54 * mm
+COLS, ROWS = 4, 4
+GAP = 6 * mm
 PAGE_W, PAGE_H = A4
 GRID_W = COLS * STAMP_W + (COLS - 1) * GAP
 GRID_H = ROWS * STAMP_H + (ROWS - 1) * GAP
@@ -227,7 +256,7 @@ def stamp(c, x, y, item):
     c.setLineWidth(1.2)
     c.rect(ix, iy, iw, ih, stroke=1, fill=1)
 
-    px = 0.42 * mm
+    px = 0.36 * mm
     top = iy + ih - 2 * mm
     pixel_text(c, "25", ix + 2 * mm, top, px * 1.3, INK)
     pixel_text(c, "SAUDADES", ix + 2 * mm, top - 4.4 * mm, px * 0.8, INK)
@@ -237,23 +266,40 @@ def stamp(c, x, y, item):
     when = "ABRA JÁ" if i == 0 else item["when"]
     pixel_text(c, when, ix + iw - 2 * mm - text_width(when, px * 0.8), top - 4.4 * mm, px * 0.8, INK)
 
-    art_top = top - 8.5 * mm
-    art_h = 20 * mm
-    draw_art(c, ART_ORDER[i % len(ART_ORDER)], ix + iw / 2, art_top - art_h / 2, iw - 8 * mm, art_h)
+    art_top = top - 8 * mm
+    art_h = art_top - (iy + 8 * mm)
+    draw_art(c, ART_ORDER[i % len(ART_ORDER)], ix + iw / 2, art_top - art_h / 2, iw - 6 * mm, art_h)
 
     cap = CAPTIONS[i % len(CAPTIONS)]
     cap_px = px * 0.85 if text_width(cap, px * 0.85) < iw - 3 * mm else (iw - 3 * mm) / (len(cap) * 6 - 1)
-    centered_text(c, cap, ix + iw / 2, art_top - art_h - 1.5 * mm, cap_px, INK)
+    centered_text(c, cap, ix + iw / 2, iy + 5.2 * mm, cap_px, INK)
 
-    # QR com margem branca, como um código de rastreio
-    qx = ix + (iw - QR_SIZE) / 2
-    qy = iy + 2.2 * mm
-    c.setFillColor(white)
+    crop_marks(c, x, y, STAMP_W, STAMP_H)
+
+
+def special_stamp(c, x, y, k):
+    art, cap = SPECIALS[k % len(SPECIALS)]
+    back, inner = SPECIAL_BACKS[k % len(SPECIAL_BACKS)]
+    perforated(c, x, y, STAMP_W, STAMP_H, HexColor(back))
+    m = 3.6 * mm
+    ix, iy, iw, ih = x + m, y + m, STAMP_W - 2 * m, STAMP_H - 2 * m
+    c.setFillColor(HexColor(inner))
     c.setStrokeColor(INK)
-    c.setLineWidth(0.8)
-    c.rect(qx - 0.8 * mm, qy - 0.8 * mm, QR_SIZE + 1.6 * mm, QR_SIZE + 1.6 * mm, stroke=1, fill=1)
-    qr(c, item["url"], qx, qy, QR_SIZE)
-
+    c.setLineWidth(1.2)
+    c.rect(ix, iy, iw, ih, stroke=1, fill=1)
+    px = 0.36 * mm
+    top = iy + ih - 2 * mm
+    pixel_text(c, "7", ix + 2 * mm, top, px * 1.3, INK)
+    pixel_text(c, "SAUDADES", ix + 2 * mm, top - 4.4 * mm, px * 0.8, INK)
+    tag = "SP"
+    pixel_text(c, tag, ix + iw - 2 * mm - text_width(tag, px * 1.3), top, px * 1.3, HexColor("#7b4fb0"))
+    sub = "ESPECIAL"
+    pixel_text(c, sub, ix + iw - 2 * mm - text_width(sub, px * 0.8), top - 4.4 * mm, px * 0.8, INK)
+    art_top = top - 8 * mm
+    art_h = art_top - (iy + 8 * mm)
+    draw_art(c, art, ix + iw / 2, art_top - art_h / 2, iw - 6 * mm, art_h)
+    cap_px = px * 0.85 if text_width(cap, px * 0.85) < iw - 3 * mm else (iw - 3 * mm) / (len(cap) * 6 - 1)
+    centered_text(c, cap, ix + iw / 2, iy + 5.2 * mm, cap_px, INK)
     crop_marks(c, x, y, STAMP_W, STAMP_H)
 
 
@@ -265,19 +311,22 @@ def main() -> None:
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else SECRETS / "selos.pdf"
     c = canvas.Canvas(str(out), pagesize=A4)
     c.setTitle("Correio de Nós Dois - selos")
+    # selos normais e, nas vagas que sobram, os especiais (economiza folha na gráfica)
+    jobs = [lambda c, x, y, it=item: stamp(c, x, y, it) for item in items]
+    jobs += [lambda c, x, y, k=k: special_stamp(c, x, y, k) for k in range(len(SPECIALS))]
     per_page = COLS * ROWS
-    for start in range(0, len(items), per_page):
-        for k, item in enumerate(items[start : start + per_page]):
+    for start in range(0, len(jobs), per_page):
+        for k, job in enumerate(jobs[start : start + per_page]):
             col, row = k % COLS, k // COLS
             x = X0 + col * (STAMP_W + GAP)
             y = Y0 + (ROWS - 1 - row) * (STAMP_H + GAP)
-            stamp(c, x, y, item)
+            job(c, x, y)
         c.setFillColor(HexColor("#8a5a43"))
         c.setFont("Helvetica", 7)
-        c.drawCentredString(PAGE_W / 2, 6 * mm, "Imprimir em 100% (tamanho real). Vinil fosco. Cortar nas marcas de canto: cada selo tem 52 x 74 mm.")
+        c.drawCentredString(PAGE_W / 2, 6 * mm, "Imprimir em 100% (tamanho real). Vinil fosco. Cortar nas marcas de canto: cada selo tem 42 x 54 mm. Selos roxos: colar ao lado do selo normal nos dias do show.")
         c.showPage()
     c.save()
-    print(f"{len(items)} selos em {out}")
+    print(f"{len(items)} selos + {len(SPECIALS)} especiais em {out}")
 
 
 if __name__ == "__main__":

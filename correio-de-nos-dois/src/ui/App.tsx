@@ -13,7 +13,8 @@ import {
   type EnvelopeId,
   type LetterContent,
 } from '../domain'
-import { OPEN_PATH, canScanInApp, parseEnvelopeLink, startQrScanner } from '../infrastructure'
+import { OPEN_PATH, canScanInApp, parseEnvelopeLink, startQrTracker, type QrHit } from '../infrastructure'
+import type { ArOverlay } from './ar/ar-overlay'
 import { Background } from './Background'
 import { useInstall } from './install'
 import { usePush } from './push'
@@ -268,7 +269,11 @@ export function App({ container }: { container: Container }) {
         </div>
       </div>
 
-      {sheet && <SheetView sheet={sheet} container={container} onClose={() => setSheet(null)} onSheet={setSheet} />}
+      {sheet?.kind === 'scanner' ? (
+        <Scanner container={container} onClose={() => setSheet(null)} onSheet={setSheet} />
+      ) : (
+        sheet && <SheetView sheet={sheet} container={container} onClose={() => setSheet(null)} />
+      )}
     </>
   )
 }
@@ -277,12 +282,10 @@ function SheetView({
   sheet,
   container,
   onClose,
-  onSheet,
 }: {
   sheet: Exclude<Sheet, null>
   container: Container
   onClose: () => void
-  onSheet: (s: Sheet) => void
 }) {
   const title =
     sheet.kind === 'scanner' ? 'Escanear envelope'
@@ -297,7 +300,6 @@ function SheetView({
             <Px name="x" />
           </button>
         </div>
-        {sheet.kind === 'scanner' && <Scanner container={container} onSheet={onSheet} />}
         {sheet.kind === 'opening' && (
           <div className="loading">
             <Px name="env" />
@@ -390,43 +392,113 @@ function InstallCard() {
   )
 }
 
-function Scanner({ container, onSheet }: { container: Container; onSheet: (s: Sheet) => void }) {
+/** Quanto tempo a figura de AR fica na tela antes de abrir a carta. */
+const AR_REVEAL_MS = 2200
+
+/**
+ * Leitor em tela cheia. Ao achar um envelope, mostra um coração em AR preso ao QR
+ * (pose calculada pelos 4 cantos) e depois abre a carta. Sem WebGL ou sem cantos, abre direto.
+ */
+function Scanner({
+  container,
+  onClose,
+  onSheet,
+}: {
+  container: Container
+  onClose: () => void
+  onSheet: (s: Sheet) => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  const [found, setFound] = useState<EnvelopeId | null>(null)
+  const openNow = useRef<() => void>(() => {})
 
   useEffect(() => {
     let stop: (() => void) | undefined
     let cancelled = false
-    if (!videoRef.current) return
-    startQrScanner(videoRef.current, (text) => {
-      try {
-        const link = parseEnvelopeLink(text)
+    let ar: ArOverlay | null = null
+    let link: { envelopeId: EnvelopeId; paperKey: Uint8Array; text: string } | null = null
+    let openTimer = 0
+
+    const open = () => {
+      if (!link) return
+      stop?.()
+      onSheet({ kind: 'opening', id: link.envelopeId, paperKey: link.paperKey })
+    }
+
+    import('./ar/ar-overlay')
+      .then(({ mountArOverlay }) => {
+        if (!cancelled && canvasRef.current) ar = mountArOverlay(canvasRef.current)
+      })
+      .catch((e: unknown) => console.warn('AR indisponível', e))
+
+    const onFrame = (hit: QrHit | null) => {
+      if (!link && hit) {
+        try {
+          const parsed = parseEnvelopeLink(hit.text)
+          link = { ...parsed, text: hit.text }
+        } catch {
+          stop?.()
+          onSheet({ kind: 'error', title: 'Código estranho', text: 'Esse QR não parece ser de um envelope do nosso correio.' })
+          return
+        }
         container.store.rememberKey(link.envelopeId, link.paperKey)
-        onSheet({ kind: 'opening', id: link.envelopeId, paperKey: link.paperKey })
-      } catch {
-        onSheet({ kind: 'error', title: 'Código estranho', text: 'Esse QR não parece ser de um envelope do nosso correio.' })
+        setFound(link.envelopeId)
+        ar?.setLabel(String(link.envelopeId))
+        // sem cantos ou sem AR não há o que mostrar: abre quase direto
+        openTimer = window.setTimeout(open, ar && hit.corners.length === 4 ? AR_REVEAL_MS : 400)
       }
-    })
+      // só segue o QR do envelope encontrado (outro QR na mesa não puxa o coração)
+      ar?.update(hit && link && hit.text === link.text ? hit : null)
+    }
+
+    if (!videoRef.current) return
+    startQrTracker(videoRef.current, onFrame)
       .then((s) => {
         if (cancelled) s()
         else stop = s
       })
       .catch(() => setProblem('Não consegui usar a câmera. Permita o acesso ou use a câmera do celular apontando para o código.'))
+
+    // botão "Abrir agora": pula o resto da animação
+    openNow.current = () => {
+      window.clearTimeout(openTimer)
+      open()
+    }
     return () => {
       cancelled = true
+      window.clearTimeout(openTimer)
       stop?.()
+      ar?.dispose()
     }
   }, [container, onSheet])
 
   return (
-    <>
-      <div className="viewfinder">
-        <video ref={videoRef} muted playsInline />
+    <div className="scan" role="dialog" aria-label="Escanear envelope">
+      <video ref={videoRef} muted playsInline />
+      <canvas ref={canvasRef} className="ar" aria-hidden="true" />
+      {found === null && <div className="scan-frame" aria-hidden="true" />}
+      <div className="scan-top">
+        <b>Escanear envelope</b>
+        <button className="x" onClick={onClose} aria-label="Fechar">
+          <Px name="x" />
+        </button>
       </div>
-      <p className="soft" style={{ textAlign: 'center' }}>
-        {problem ?? 'Aponte para o código colado no envelope.'}
-      </p>
-    </>
+      <div className="scan-bottom">
+        {found === null ? (
+          <p>{problem ?? 'Aponte para o código colado no envelope.'}</p>
+        ) : (
+          <>
+            <p>Envelope {found} encontrado ♥</p>
+            <button className="btn" onClick={() => openNow.current()}>
+              <Px name="envOpen" />
+              Abrir agora
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
